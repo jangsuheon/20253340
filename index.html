@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Design Insight Curator</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:'Pretendard', 'Noto Sans KR', sans-serif}
+    body{
+      background:linear-gradient(135deg,#FFD3A5 0%,#FD6585 100%);
+      min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:40px 20px; color:#333;
+    }
+    h1{font-size:2rem;font-weight:700;color:#fff;margin-bottom:20px}
+    .input-container{
+      background:rgba(255,255,255,0.95); border-radius:20px; box-shadow:0 8px 20px rgba(0,0,0,0.1);
+      padding:20px; width:100%; max-width:500px; margin-bottom:30px; display:flex; flex-direction:column; gap:10px;
+    }
+    .input-container input, .input-container textarea, .input-container select{
+      width:100%; border:none; border-radius:10px; padding:12px 14px; font-size:1rem; outline:none; background:#f8f8f8;
+    }
+    .add-btn{
+      align-self:flex-end; background:linear-gradient(135deg,#FD6585,#FFD3A5); color:#fff; border:none; border-radius:30px;
+      padding:10px 20px; font-size:.9rem; cursor:pointer; font-weight:600; transition:.2s;
+    }
+    .add-btn:hover{transform:scale(1.04)}
+    .filter-bar{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-bottom:20px;width:100%;max-width:800px}
+    #searchInput,#categoryFilter{padding:10px 14px;border:none;border-radius:20px;font-size:1rem;outline:none;
+      box-shadow:0 3px 10px rgba(0,0,0,0.1)}
+    .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:24px;width:100%;max-width:1080px}
+    .card{background:#fff;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,0.08);overflow:hidden;display:flex;flex-direction:column;transition:.3s;cursor:grab}
+    .card.dragging{opacity:.5;transform:scale(.98)}
+    .card img{width:100%;height:160px;object-fit:cover;cursor:pointer;user-select:none}
+    .card-content{padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+    .card h3{font-size:1.2rem;font-weight:600;background:linear-gradient(135deg,#FD6585,#FFD3A5);-webkit-background-clip:text;color:transparent}
+    .card p{color:#555;font-size:.95rem;line-height:1.4}
+    .tags{display:flex;flex-wrap:wrap;gap:6px}
+    .tag{background:#FFD3A5;color:#333;padding:4px 10px;border-radius:10px;font-size:.8rem;cursor:pointer;transition:.15s}
+    .tag:hover{background:#FD6585;color:#fff}
+    .card a{font-size:.85rem;color:#FD6585;text-decoration:none;word-break:break-all}
+    .card button{border:none;background:none;cursor:pointer;font-weight:600;font-size:.9rem;color:#FD6585;margin-right:10px}
+    .empty{color:rgba(255,255,255,.9);font-weight:500;text-align:center;margin-top:40px}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;visibility:hidden;opacity:0;transition:opacity .25s}
+    .modal.active{visibility:visible;opacity:1}
+    .modal img{max-width:90%;max-height:90%;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+    .modal-box{background:#fff;border-radius:20px;padding:20px;width:90%;max-width:500px;display:flex;flex-direction:column;gap:10px}
+    @media (max-width:600px){body{padding:20px 10px} h1{font-size:1.6rem}}
+  </style>
+</head>
+<body>
+  <h1>🎨 Design Insight Curator</h1>
+
+  <div class="input-container">
+    <input id="titleInput" type="text" placeholder="인사이트 제목" />
+    <textarea id="descInput" rows="3" placeholder="아이디어 내용을 입력하세요"></textarea>
+    <input id="urlInput" type="url" placeholder="참고 URL (선택)" />
+    <input id="tagInput" type="text" placeholder="태그 (쉼표로 구분)" />
+    <select id="categoryInput">
+      <option value="">카테고리 선택</option>
+      <option value="디자인">디자인</option>
+      <option value="테크">테크</option>
+      <option value="UX">UX</option>
+      <option value="브랜딩">브랜딩</option>
+      <option value="기타">기타</option>
+    </select>
+    <input id="imageInput" type="file" accept="image/*" />
+    <img id="preview" style="width:100%;border-radius:10px;display:none" alt="미리보기"/>
+    <button class="add-btn" id="addBtn">+ 인사이트 추가</button>
+  </div>
+
+  <div class="filter-bar">
+    <input type="text" id="searchInput" placeholder="제목 또는 태그 검색..." />
+    <select id="categoryFilter">
+      <option value="">전체 카테고리</option>
+      <option value="디자인">디자인</option>
+      <option value="테크">테크</option>
+      <option value="UX">UX</option>
+      <option value="브랜딩">브랜딩</option>
+      <option value="기타">기타</option>
+    </select>
+  </div>
+
+  <div class="card-grid" id="cardGrid"></div>
+  <p class="empty" id="emptyMessage">아직 등록된 인사이트가 없습니다.</p>
+
+  <!-- 이미지 확대 모달 -->
+  <div class="modal" id="imageModal" onclick="closeModal()">
+    <img id="modalImage" src="" alt="원본 이미지" />
+  </div>
+
+  <!-- 수정 모달 -->
+  <div class="modal" id="editModal">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <h2>인사이트 수정</h2>
+      <input id="editTitle" type="text" placeholder="제목" />
+      <textarea id="editDesc" rows="3" placeholder="내용"></textarea>
+      <input id="editURL" type="url" placeholder="URL" />
+      <input id="editTags" type="text" placeholder="태그 (쉼표로 구분)" />
+      <select id="editCategory">
+        <option value="">카테고리 선택</option>
+        <option value="디자인">디자인</option>
+        <option value="테크">테크</option>
+        <option value="UX">UX</option>
+        <option value="브랜딩">브랜딩</option>
+        <option value="기타">기타</option>
+      </select>
+      <input id="editImage" type="file" accept="image/*" />
+      <img id="editPreview" style="width:100%;border-radius:10px;display:none" alt="수정 미리보기"/>
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button id="cancelEditBtn">취소</button>
+        <button id="saveEditBtn" style="background:linear-gradient(135deg,#FD6585,#FFD3A5);color:#fff;border:none;border-radius:20px;padding:8px 20px;cursor:pointer">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 데이터 로드
+    let insights = JSON.parse(localStorage.getItem("insights") || "[]");
+    let editIndex = null;
+
+    // DOM 요소
+    const grid = document.getElementById("cardGrid");
+    const preview = document.getElementById("preview");
+    const emptyMsg = document.getElementById("emptyMessage");
+    const imageInput = document.getElementById("imageInput");
+    const addBtn = document.getElementById("addBtn");
+    const searchInput = document.getElementById("searchInput");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const editModal = document.getElementById("editModal");
+    const imageModal = document.getElementById("imageModal");
+    const modalImage = document.getElementById("modalImage");
+
+    // 안전하게 전역에 바인딩 (인라인 핸들러와 호환)
+    window.previewImage = function (e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        preview.style.display = "none";
+        preview.src = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        preview.src = ev.target.result;
+        preview.style.display = "block";
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.previewEditImage = function (e) {
+      const file = e.target.files && e.target.files[0];
+      const editPreview = document.getElementById("editPreview");
+      if (!file) {
+        editPreview.style.display = "none";
+        editPreview.src = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        editPreview.src = ev.target.result;
+        editPreview.style.display = "block";
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // 이벤트 리스너 연결 (인라인 대신 JS에서 연결해도 안전)
+    imageInput.addEventListener("change", (e) => window.previewImage(e));
+    document.getElementById("editImage").addEventListener("change", (e) => window.previewEditImage(e));
+
+    // 추가 버튼
+    addBtn.addEventListener("click", addInsight);
+
+    // 검색/카테고리 필터 입력
+    searchInput.addEventListener("input", filterInsights);
+    categoryFilter.addEventListener("change", filterInsights);
+
+    // 편집 모달 버튼 연결
+    document.getElementById("cancelEditBtn").addEventListener("click", closeEditModal);
+    document.getElementById("saveEditBtn").addEventListener("click", saveEdit);
+
+    // 초기 랜더
+    renderInsights();
+
+    // --- 기능 구현 ---
+    function saveToStorage() {
+      localStorage.setItem("insights", JSON.stringify(insights));
+    }
+
+    function addInsight() {
+      const title = document.getElementById("titleInput").value.trim();
+      const desc = document.getElementById("descInput").value.trim();
+      const url = document.getElementById("urlInput").value.trim();
+      const tags = document.getElementById("tagInput").value.split(",").map(t => t.trim()).filter(Boolean);
+      const category = document.getElementById("categoryInput").value;
+      const image = preview.src && preview.style.display === "block" ? preview.src : "";
+
+      if (!title || !desc) { alert("제목과 내용을 입력해주세요."); return; }
+
+      insights.push({ title, description: desc, url, tags, category, image, id: Date.now() });
+      saveToStorage();
+      clearForm();
+      renderInsights();
+    }
+
+    function clearForm() {
+      document.getElementById("titleInput").value = "";
+      document.getElementById("descInput").value = "";
+      document.getElementById("urlInput").value = "";
+      document.getElementById("tagInput").value = "";
+      document.getElementById("categoryInput").value = "";
+      imageInput.value = "";
+      preview.src = "";
+      preview.style.display = "none";
+    }
+
+    function renderInsights(filteredList) {
+      const list = Array.isArray(filteredList) ? filteredList : insights;
+      grid.innerHTML = "";
+      if (!list.length) { emptyMsg.style.display = "block"; return; }
+      emptyMsg.style.display = "none";
+
+      list.forEach((insight, displayIndex) => {
+        // displayIndex는 렌더된 리스트 순서. 실제 원본 배열의 인덱스는 찾기 필요.
+        // 원본 배열의 인덱스(데이터 기준)를 id로 찾는다.
+        const dataIndex = insights.findIndex(i => i.id === insight.id);
+        const card = document.createElement("div");
+        card.className = "card";
+        card.draggable = true;
+        card.dataset.index = dataIndex;
+
+        const imgHtml = insight.image ? `<img src="${insight.image}" draggable="false" onclick="openModal('${insight.image}')"/>` : "";
+        const tagsHtml = (insight.tags && insight.tags.length) ? `<div class="tags">${insight.tags.map(t => `<span class='tag' onclick="filterByTag('${escapeHtml(t)}')">${escapeHtml(t)}</span>`).join("")}</div>` : "";
+
+        card.innerHTML = `
+          ${imgHtml}
+          <div class="card-content">
+            <h3>${escapeHtml(insight.title)}</h3>
+            <p>${escapeHtml(insight.description)}</p>
+            ${insight.url ? `<a href="${escapeAttr(insight.url)}" target="_blank" rel="noopener">${escapeHtml(insight.url)}</a>` : ""}
+            ${tagsHtml}
+            <small>📁 ${escapeHtml(insight.category || "기타")}</small>
+            <div>
+              <button onclick="editInsightById(${insight.id})">수정</button>
+              <button onclick="deleteInsightById(${insight.id})">삭제</button>
+            </div>
+          </div>
+        `;
+
+        // 이미지 드래그 분리 방지: 이미지를 직접 드래그하면 브라우저 기본동작 방지
+        const imgEl = card.querySelector("img");
+        if (imgEl) imgEl.addEventListener("dragstart", e => e.preventDefault());
+
+        addDragEvents(card);
+        grid.appendChild(card);
+      });
+    }
+
+    // 안전한 텍스트/속성 이스케이프
+    function escapeHtml(str = "") {
+      return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[s]));
+    }
+    function escapeAttr(s = "") { return encodeURI(String(s)); }
+
+    // --- 모달 이미지 ---
+    window.openModal = function (src) {
+      imageModal.classList.add("active");
+      modalImage.src = src;
+    };
+    window.closeModal = function () { imageModal.classList.remove("active"); modalImage.src = ""; };
+
+    // --- 편집 (id 기반) ---
+    window.editInsightById = function(id) {
+      const idx = insights.findIndex(i => i.id === id);
+      if (idx === -1) return;
+      editIndex = idx;
+      const i = insights[idx];
+      document.getElementById("editTitle").value = i.title;
+      document.getElementById("editDesc").value = i.description;
+      document.getElementById("editURL").value = i.url || "";
+      document.getElementById("editTags").value = (i.tags || []).join(", ");
+      document.getElementById("editCategory").value = i.category || "";
+      document.getElementById("editPreview").src = i.image || "";
+      document.getElementById("editPreview").style.display = i.image ? "block" : "none";
+      editModal.classList.add("active");
+    };
+
+    function saveEdit() {
+      if (editIndex === null) return;
+      const newTitle = document.getElementById("editTitle").value.trim();
+      const newDesc = document.getElementById("editDesc").value.trim();
+      const newURL = document.getElementById("editURL").value.trim();
+      const newTags = document.getElementById("editTags").value.split(",").map(t => t.trim()).filter(Boolean);
+      const newCategory = document.getElementById("editCategory").value;
+      const newImage = document.getElementById("editPreview").src || "";
+
+      if (!newTitle || !newDesc) { alert("제목과 내용을 입력해주세요."); return; }
+
+      insights[editIndex] = { ...insights[editIndex], title: newTitle, description: newDesc, url: newURL, tags: newTags, category: newCategory, image: newImage };
+      saveToStorage();
+      closeEditModal();
+      renderInsights();
+    }
+
+    function closeEditModal() {
+      editModal.classList.remove("active");
+      editIndex = null;
+      document.getElementById("editImage").value = "";
+      document.getElementById("editPreview").src = "";
+      document.getElementById("editPreview").style.display = "none";
+    }
+
+    // --- 삭제 (id 기반) ---
+    window.deleteInsightById = function(id) {
+      const idx = insights.findIndex(i => i.id === id);
+      if (idx === -1) return;
+      if (!confirm("삭제하시겠습니까?")) return;
+      insights.splice(idx,1);
+      saveToStorage();
+      renderInsights();
+    };
+
+    // --- 드래그 앤 드롭 ---
+    function addDragEvents(card) {
+      card.addEventListener("dragstart", e => { e.target.classList.add("dragging"); });
+      card.addEventListener("dragend", e => {
+        e.target.classList.remove("dragging");
+        updateOrderByDOM();
+      });
+      card.addEventListener("dragover", e => {
+        e.preventDefault();
+        const dragging = document.querySelector(".dragging");
+        const cards = [...grid.querySelectorAll(".card:not(.dragging)")];
+        const next = cards.find(c => e.clientY <= c.getBoundingClientRect().top + c.offsetHeight / 2);
+        grid.insertBefore(dragging, next);
+      });
+    }
+
+    function updateOrderByDOM() {
+      const newOrder = [];
+      grid.querySelectorAll(".card").forEach(c => {
+        const id = insights[c.dataset.index]?.id;
+        // if dataset.index mapping changed (because we render by id), use card content's title to find id
+        if (!id) {
+          // try to find by title shown (fallback)
+          const titleEl = c.querySelector("h3");
+          const titleText = titleEl ? titleEl.textContent : null;
+          const found = insights.find(i => i.title === titleText);
+          if (found) newOrder.push(found);
+        } else {
+          const found = insights.find(i => i.id === id);
+          if (found) newOrder.push(found);
+        }
+      });
+      // if newOrder empty (edge cases), skip; otherwise apply
+      if (newOrder.length) { insights = newOrder; saveToStorage(); renderInsights(); }
+    }
+
+    // --- 필터/검색/태그 클릭 ---
+    function filterInsights() {
+      const q = (searchInput.value || "").toLowerCase();
+      const cat = categoryFilter.value;
+      const filtered = insights.filter(i => {
+        const matchCategory = !cat || (i.category === cat);
+        const matchTitle = (i.title || "").toLowerCase().includes(q);
+        const matchTag = (i.tags || []).some(t => t.toLowerCase().includes(q));
+        // if q empty, matchTitle false but matchTag false: treat as match
+        const matchQuery = !q || matchTitle || matchTag;
+        return matchCategory && matchQuery;
+      });
+      renderInsights(filtered);
+    }
+
+    window.filterByTag = function(tag) {
+      searchInput.value = tag;
+      filterInsights();
+    };
+
+    // --- 유틸: 안전하게 렌더된 카드의 dataset.index 업데이트 (renderInsights 내에서 호출)
+    // NOTE: Because we render by 'insights' and use id mapping, we set dataset.index to actual index in insights array
+    function renderInsights(list) {
+      // replaced earlier renderInsights with safe wrapper
+      const arr = Array.isArray(list) ? list : insights;
+      grid.innerHTML = "";
+      if (!arr.length) { emptyMsg.style.display = "block"; return; }
+      emptyMsg.style.display = "none";
+
+      arr.forEach(item => {
+        const dataIndex = insights.findIndex(i => i.id === item.id);
+        const card = document.createElement("div");
+        card.className = "card";
+        card.draggable = true;
+        card.dataset.index = dataIndex;
+
+        const imgHtml = item.image ? `<img src="${item.image}" draggable="false" onclick="openModal('${item.image}')"/>` : "";
+        const tagsHtml = (item.tags && item.tags.length) ? `<div class="tags">${item.tags.map(t => `<span class='tag' onclick="filterByTag('${escapeHtml(t)}')">${escapeHtml(t)}</span>`).join("")}</div>` : "";
+
+        card.innerHTML = `
+          ${imgHtml}
+          <div class="card-content">
+            <h3>${escapeHtml(item.title)}</h3>
+            <p>${escapeHtml(item.description)}</p>
+            ${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.url)}</a>` : ""}
+            ${tagsHtml}
+            <small>📁 ${escapeHtml(item.category || "기타")}</small>
+            <div>
+              <button onclick="editInsightById(${item.id})">수정</button>
+              <button onclick="deleteInsightById(${item.id})">삭제</button>
+            </div>
+          </div>
+        `;
+
+        const imgEl = card.querySelector("img");
+        if (imgEl) imgEl.addEventListener("dragstart", e => e.preventDefault());
+
+        addDragEvents(card);
+        grid.appendChild(card);
+      });
+    }
+
+    // renderInsights wrapper call to initialize correctly
+    renderInsights();
+
+    // --- 도우미 (escape) ---
+    function escapeHtml(str = "") {
+      return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[s]));
+    }
+    function escapeAttr(s = "") { try { return encodeURI(String(s)); } catch { return ""; } }
+
+    // Expose some utilities globally (for inline onclick)
+    window.filterInsights = filterInsights;
+    window.editInsight = window.editInsightById;
+    window.deleteInsight = window.deleteInsightById;
+
+  </script>
+</body>
+</html>
